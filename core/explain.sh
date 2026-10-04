@@ -4,7 +4,7 @@
 # ==============================
 
 source "$TDOC_ROOT/core/ai_explain.sh"
-STATE_FILE="${PREFIX}/var/lib/tdoc/state.env"
+STATE_FILE="${PREFIX:-/data/data/com.termux/files/usr}/var/lib/tdoc/state.env"
 
 echo -e "🧠 Termux Doctor — Explanation Mode\n"
 

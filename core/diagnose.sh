@@ -17,7 +17,7 @@ source "$TDOC_ROOT/core/ai_explain.sh"
 source "$TDOC_ROOT/core/diagnose_engine.sh"
 load_lang
 
-STATE_FILE="${PREFIX}/var/lib/tdoc/state.env"
+STATE_FILE="${PREFIX:-/data/data/com.termux/files/usr}/var/lib/tdoc/state.env"
 REPO_SCAN_STATE="${HOME}/.tdoc/repo_scan_last.txt"
 
 BORDER="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

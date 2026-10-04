@@ -7,7 +7,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-export TDOC_ROOT="${PREFIX}/lib/tdoc"
+export TDOC_ROOT="${PREFIX:-/data/data/com.termux/files/usr}/lib/tdoc"
 
 [[ -d "$TDOC_ROOT/core" ]] || { echo "TDOC: core not found at $TDOC_ROOT" >&2; exit 127; }
 
@@ -67,7 +67,7 @@ print_help() {
   echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 }
 
-mkdir -p "${PREFIX}/var/lib/tdoc"
+mkdir -p "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/tdoc"
 
 case "$cmd" in
   version|-v|--version) source "$TDOC_ROOT/core/ui_version.sh"; tdoc_version_ui ;;
@@ -95,7 +95,7 @@ case "$cmd" in
   watch)     INTERVAL="${2:-60}"; source "$TDOC_ROOT/core/watch.sh" "$INTERVAL" ;;
   checkup)   shift; source "$TDOC_ROOT/core/checkup.sh" "${1:-}" ;;
   explain)   source "$TDOC_ROOT/core/explain.sh" ;;
-  report)    cat "${PREFIX}/var/lib/tdoc/state.env" 2>/dev/null || echo "$(t L_STATUS_NO_STATE)" ;;
+  report)    cat "${PREFIX:-/data/data/com.termux/files/usr}/var/lib/tdoc/state.env" 2>/dev/null || echo "$(t L_STATUS_NO_STATE)" ;;
   history)   source "$TDOC_ROOT/core/history.sh" ;;
   check)     PKG="${2:-}"; source "$TDOC_ROOT/core/check.sh" "$PKG" ;;
   benchmark) source "$TDOC_ROOT/core/benchmark.sh" ;;

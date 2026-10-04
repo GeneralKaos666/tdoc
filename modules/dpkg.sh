@@ -51,7 +51,10 @@ _tdoc_dpkg_lock_held() {
   # Falling back to "not found -> stale" is wrong and causes constant false
   # positives. Instead, fall back to checking for a live apt/dpkg process.
   if command -v pgrep >/dev/null 2>&1; then
-    pgrep -x 'apt|apt-get|dpkg|apt-get.real|apt.real' >/dev/null 2>&1 && return 0
+    local _p
+    for _p in apt apt-get dpkg apt-get.real apt.real; do
+      pgrep -x "$_p" >/dev/null 2>&1 && return 0
+    done
     return 1
   fi
 

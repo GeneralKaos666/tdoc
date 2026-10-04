@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-PREFIX_PATH="$PREFIX"
+PREFIX_PATH="${PREFIX:-/data/data/com.termux/files/usr}"
 INSTALL_DIR="$PREFIX_PATH/lib/tdoc"
 BIN_PATH="$PREFIX_PATH/bin/tdoc"
 MAN_PAGE="$PREFIX_PATH/share/man/man1/tdoc.1"

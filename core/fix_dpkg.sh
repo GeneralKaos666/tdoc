@@ -16,6 +16,22 @@ DPKG_STATUS="${PREFIX}/var/lib/dpkg/status"
 DPKG_STATUS_BAK="${PREFIX}/var/lib/dpkg/status.backup.tdoc"
 DPKG_INFO_DIR="${PREFIX}/var/lib/dpkg/info"
 
+_tdoc_dpkg_lock_held_fix() {
+  local lockfile="$1"
+  if command -v fuser >/dev/null 2>&1; then
+    fuser "$lockfile" >/dev/null 2>&1 && return 0
+    return 1
+  fi
+  if command -v pgrep >/dev/null 2>&1; then
+    local _p
+    for _p in apt apt-get dpkg apt-get.real apt.real; do
+      pgrep -x "$_p" >/dev/null 2>&1 && return 0
+    done
+    return 1
+  fi
+  return 0
+}
+
 fix_DpkgLock() {
   read -rp "$(t L_DPKG_FIX_LOCK_PROMPT) $(t L_PROMPT_YN): " ans
   [[ "$ans" =~ ^[YyTt]$ ]] || { print_skip "$(t L_DPKG_FIX_LOCK_SKIP)"; skipped_items+=("DpkgLock"); return; }
@@ -23,7 +39,7 @@ fix_DpkgLock() {
   local removed=false
   for lockfile in "$DPKG_LOCK" "$DPKG_LOCK_FRONTEND"; do
     if [[ -f "$lockfile" ]]; then
-      if fuser "$lockfile" >/dev/null 2>&1; then
+      if _tdoc_dpkg_lock_held_fix "$lockfile"; then
         print_warn "$(t L_DPKG_FIX_LOCK_IN_USE): $lockfile"
         print_info "$(t L_DPKG_FIX_LOCK_KILL_HINT)"
       else
@@ -45,7 +61,7 @@ fix_DpkgLock() {
 auto_fix_DpkgLock() {
   for lockfile in "$DPKG_LOCK" "$DPKG_LOCK_FRONTEND"; do
     if [[ -f "$lockfile" ]]; then
-      if fuser "$lockfile" >/dev/null 2>&1; then
+      if _tdoc_dpkg_lock_held_fix "$lockfile"; then
         print_warn "$(t L_DPKG_FIX_LOCK_IN_USE): $lockfile"
         skipped+=("DpkgLock"); return
       else
@@ -301,16 +317,21 @@ fix_DpkgMissingFilesList() {
       repaired=$((repaired+1))
     else
       spinner_stop; print_warn "$pkg $(t L_DPKG_FIX_FILES_LIST_FAIL)"
-      touch "${DPKG_INFO_DIR}/${pkg}.list" 2>/dev/null || true
+      print_info "$(t L_DPKG_FIX_FILES_LIST_MANUAL_HINT): pkg reinstall -y $pkg"
     fi
   done
 
   print_info "$(t L_DPKG_FIX_FILES_LIST_REPAIRED): $repaired / $count"
-  fixed_items+=("DpkgMissingFilesList")
+  if [[ $repaired -eq $count ]]; then
+    fixed_items+=("DpkgMissingFilesList")
+  else
+    skipped_items+=("DpkgMissingFilesList")
+  fi
 }
 
 auto_fix_DpkgMissingFilesList() {
   local missing_list=()
+  local _repaired=0
   while IFS= read -r pkg; do
     [[ -z "$pkg" ]] && continue
     [[ ! -f "${DPKG_INFO_DIR}/${pkg}.list" ]] && missing_list+=("$pkg")
@@ -323,17 +344,22 @@ auto_fix_DpkgMissingFilesList() {
     spinner_start "Reinstalling $pkg..."
     if pkg reinstall -y "$pkg" 2>/dev/null; then
       spinner_stop; print_ok "$pkg"
+      _repaired=$((_repaired + 1))
     else
-      spinner_stop; touch "${DPKG_INFO_DIR}/${pkg}.list" 2>/dev/null || true
-      print_warn "$pkg (stub created)"
+      spinner_stop
+      print_warn "$pkg $(t L_DPKG_FIX_FILES_LIST_FAIL)"
     fi
   done
-  fixed+=("DpkgMissingFilesList")
+  if [[ $_repaired -eq ${#missing_list[@]} ]]; then
+    fixed+=("DpkgMissingFilesList")
+  else
+    skipped+=("DpkgMissingFilesList")
+  fi
 }
 
 preview_DpkgMissingFilesList() {
   echo -e "${GRAY}  → pkg reinstall <each package with missing .list>${RESET}"
-  echo -e "${GRAY}  → touch \${PREFIX}/var/lib/dpkg/info/<pkg>.list  (stub fallback)${RESET}"
+  echo -e "${GRAY}  → failures left as BROKEN, manual: pkg reinstall -y <pkg>${RESET}"
 }
 
 fix_DpkgFileConflicts() {

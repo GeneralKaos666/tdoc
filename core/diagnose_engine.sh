@@ -30,19 +30,19 @@ _diag_detect_contexts() {
   local text="$1"
   local -a ctx=()
 
-  echo "$text" | grep -qiE "collecting |downloading .*\.(tar\.gz|whl)|error: subprocess-exited-with-error|building wheel for|getting requirements to build wheel|pip install" \
+  printf '%s' "$text" | grep -qiE "collecting |downloading .*\.(tar\.gz|whl)|error: subprocess-exited-with-error|building wheel for|getting requirements to build wheel|pip install" \
     && ctx+=("pip")
-  echo "$text" | grep -qiE "npm err!|npm warn|npm install" \
+  printf '%s' "$text" | grep -qiE "npm err!|npm warn|npm install" \
     && ctx+=("npm")
-  echo "$text" | grep -qiE "dpkg: |setting up |unpacking |sub-process.*dpkg|var/lib/dpkg" \
+  printf '%s' "$text" | grep -qiE "dpkg: |setting up |unpacking |sub-process.*dpkg|var/lib/dpkg" \
     && ctx+=("dpkg")
-  echo "$text" | grep -qiE "^e: |unable to fetch|failed to fetch|apt-get|apt update|apt install" \
+  printf '%s' "$text" | grep -qiE "^e: |unable to fetch|failed to fetch|apt-get|apt update|apt install" \
     && ctx+=("apt")
-  echo "$text" | grep -qiE "fatal: not a git repository|^remote: |github\.com|git clone|git commit" \
+  printf '%s' "$text" | grep -qiE "fatal: not a git repository|^remote: |github\.com|git clone|git commit" \
     && ctx+=("git")
-  echo "$text" | grep -qiE "traceback \(most recent call last\)|\.py\", line" \
+  printf '%s' "$text" | grep -qiE "traceback \(most recent call last\)|\.py\", line" \
     && ctx+=("python")
-  echo "$text" | grep -qiE "node:internal|at object\." \
+  printf '%s' "$text" | grep -qiE "node:internal|at object\." \
     && ctx+=("node")
 
   echo "${ctx[*]:-}"
@@ -61,7 +61,7 @@ _diag_context_allowed() {
 # (TAB, not "|", because the patterns themselves use "|" for alternation)
 _diag_load_rules() {
   [[ -f "$DIAG_RULES_FILE" ]] || { echo "diagnose: rules file not found: $DIAG_RULES_FILE" >&2; return 1; }
-  grep -v '^\s*#' "$DIAG_RULES_FILE" | grep -v '^\s*$'
+  grep -vE '^\s*#' "$DIAG_RULES_FILE" | grep -vE '^\s*$'
 }
 
 # Classify a single line/block of text against all rules given a set of
@@ -74,7 +74,7 @@ diag_classify_text() {
   while IFS=$'\t' read -r id ctx pattern weight; do
     [[ -z "$id" ]] && continue
     _diag_context_allowed "$ctx" "$detected_contexts" || continue
-    echo "$text" | grep -qiE "$pattern" || continue
+    printf '%s' "$text" | grep -qiE "$pattern" || continue
     if (( weight > best_weight )); then
       best_id="$id"
       best_weight="$weight"
@@ -82,6 +82,7 @@ diag_classify_text() {
   done < <(_diag_load_rules)
 
   [[ -n "$best_id" ]] && printf '%s\t%s\n' "$best_id" "$best_weight"
+  return 0
 }
 
 # Classify a whole multi-line block: returns one "id\tweight" per distinct
@@ -96,7 +97,7 @@ diag_classify_text() {
 diag_classify_block() {
   local input="$1"
   local detected
-  detected=$(_diag_detect_contexts "$(echo "$input" | tr '[:upper:]' '[:lower:]')")
+  detected=$(_diag_detect_contexts "$(printf '%s' "$input" | tr '[:upper:]' '[:lower:]')")
 
   local -A seen=()
   local -a ids=() weights=()
@@ -105,9 +106,9 @@ diag_classify_block() {
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     local lower
-    lower=$(echo "$line" | tr '[:upper:]' '[:lower:]' | tr -s ' ')
+    lower=$(printf '%s' "$line" | tr '[:upper:]' '[:lower:]' | tr -s ' ')
     local result
-    result=$(diag_classify_text "$lower" "$detected")
+    result=$(diag_classify_text "$lower" "$detected" || true)
     [[ -z "$result" ]] && continue
     local id="${result%%$'\t'*}" w="${result##*$'\t'}"
     [[ -n "${seen[$id]:-}" ]] && continue
