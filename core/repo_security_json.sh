@@ -2,6 +2,7 @@
 # ==============================
 # TDOC — Repository Security JSON
 # ==============================
+: "${TDOC_ROOT:?TDOC_ROOT is not set}"
 
 source "$TDOC_ROOT/core/version.sh"
 source "$TDOC_ROOT/core/repo_security.sh"

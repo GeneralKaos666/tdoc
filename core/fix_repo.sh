@@ -231,7 +231,19 @@ fix_repo_MissingSourceGuard() {
   print_info "  : \"\${TDOC_ROOT:?TDOC_ROOT is not set}\""
   if _rf_confirm "$(t L_REPO_FIX_GUARD_INSERT)"; then
     cp "$file" "${file}.bak"
-    sed -i '1{/^#!\/usr\/bin\/env bash/a \\n: "${TDOC_ROOT:?TDOC_ROOT is not set}"}' "$file"
+    if grep -qE '(^|[^\\])\$(TDOC_ROOT|\{TDOC_ROOT)' "$file" 2>/dev/null; then
+      if head -n1 "$file" | grep -q '^#!/'; then
+        sed -i '/^#!/a : "${TDOC_ROOT:?TDOC_ROOT is not set}"' "$file"
+      else
+        sed -i '1i : "${TDOC_ROOT:?TDOC_ROOT is not set}"' "$file"
+      fi
+    else
+      if head -n1 "$file" | grep -q '^#!/'; then
+        sed -i '/^#!/a : "${PREFIX:?PREFIX is not set}"' "$file"
+      else
+        sed -i '1i : "${PREFIX:?PREFIX is not set}"' "$file"
+      fi
+    fi
     print_ok "$(t L_REPO_FIX_GUARD_INSERTED): $file"
     return 0
   fi
@@ -240,7 +252,19 @@ fix_repo_MissingSourceGuard() {
 auto_fix_repo_MissingSourceGuard() {
   local file="$1"; [[ -z "$file" || ! -f "$file" ]] && return 1
   cp "$file" "${file}.bak"
-  sed -i '1{/^#!\/usr\/bin\/env bash/a \\n: "${TDOC_ROOT:?TDOC_ROOT is not set}"}' "$file"
+  if grep -qE '(^|[^\\])\$(TDOC_ROOT|\{TDOC_ROOT)' "$file" 2>/dev/null; then
+    if head -n1 "$file" | grep -q '^#!/'; then
+      sed -i '/^#!/a : "${TDOC_ROOT:?TDOC_ROOT is not set}"' "$file"
+    else
+      sed -i '1i : "${TDOC_ROOT:?TDOC_ROOT is not set}"' "$file"
+    fi
+  else
+    if head -n1 "$file" | grep -q '^#!/'; then
+      sed -i '/^#!/a : "${PREFIX:?PREFIX is not set}"' "$file"
+    else
+      sed -i '1i : "${PREFIX:?PREFIX is not set}"' "$file"
+    fi
+  fi
   print_ok "$(t L_REPO_FIX_GUARD_INSERTED): $file"
 }
 

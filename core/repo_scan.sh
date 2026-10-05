@@ -23,17 +23,22 @@ source "$TDOC_ROOT/core/i18n.sh"
 load_lang
 
 TARGET="${1:-$PWD}"
-[[ ! -d "$TARGET" ]] && { print_err "$(t L_REPO_SCAN_NOT_DIR): $TARGET"; exit 1; }
+[[ ! -d "$TARGET" ]] && {
+	print_err "$(t L_REPO_SCAN_NOT_DIR): $TARGET"
+	exit 1
+}
 TARGET="$(cd "$TARGET" && pwd)"
 
 BORDER="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 REPO_SCAN_STATE="${HOME}/.tdoc/repo_scan_last.txt"
 REPO_FIX_STATE="${HOME}/.tdoc/repo_fix_state.env"
 mkdir -p "$(dirname "$REPO_SCAN_STATE")"
-: > "$REPO_SCAN_STATE"
-: > "$REPO_FIX_STATE"
+: >"$REPO_SCAN_STATE"
+: >"$REPO_FIX_STATE"
 
-_total_files=0; _broken=0; _warnings=0
+_total_files=0
+_broken=0
+_warnings=0
 
 echo -e "${CYAN}${BORDER}${RESET}"
 echo -e "${CYAN}🔬 $(t L_REPO_SCAN_HEADER):${RESET}"
@@ -41,17 +46,26 @@ echo -e "${CYAN}  ${TARGET}${RESET}"
 echo -e "${CYAN}${BORDER}${RESET}"
 echo
 
-_section() { echo; echo -e "${GRAY}── $1 ──${RESET}"; }
-_ok()      { echo -e "  ${GREEN}${ICON_OK} $(t L_REPO_SCAN_NO_ISSUES)${RESET}"; }
+_section() {
+	echo
+	echo -e "${GRAY}── $1 ──${RESET}"
+}
+_ok() { echo -e "  ${GREEN}${ICON_OK} $(t L_REPO_SCAN_NO_ISSUES)${RESET}"; }
 
 _issue() {
-  local severity="$1" key="$2" msg="$3" file="${4:-}" line="${5:-}"
-  echo "$msg" >> "$REPO_SCAN_STATE"
-  echo "${key}=BROKEN:${file}:${line}" >> "$REPO_FIX_STATE"
-  case "$severity" in
-    error) echo -e "  ${RED}${ICON_ERR} ${msg}${RESET}";    _broken=$((_broken+1)) ;;
-    warn)  echo -e "  ${YELLOW}${ICON_WARN} ${msg}${RESET}"; _warnings=$((_warnings+1)) ;;
-  esac
+	local severity="$1" key="$2" msg="$3" file="${4:-}" line="${5:-}"
+	echo "$msg" >>"$REPO_SCAN_STATE"
+	echo "${key}=BROKEN:${file}:${line}" >>"$REPO_FIX_STATE"
+	case "$severity" in
+	error)
+		echo -e "  ${RED}${ICON_ERR} ${msg}${RESET}"
+		_broken=$((_broken + 1))
+		;;
+	warn)
+		echo -e "  ${YELLOW}${ICON_WARN} ${msg}${RESET}"
+		_warnings=$((_warnings + 1))
+		;;
+	esac
 }
 
 PY=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)
@@ -59,91 +73,98 @@ PY=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || true)
 _section "$(t L_REPO_SCAN_SHELL) (.sh .bash)"
 _found=false
 while IFS= read -r f; do
-  _total_files=$((_total_files+1))
-  result=$(bash -n "$f" 2>&1) || {
-    _issue "error" "ShellSyntax" "$f: $result" "$f" ""
-    _found=true; continue
-  }
-  if command -v shellcheck >/dev/null 2>&1; then
-    while IFS= read -r line; do
-      [[ "$line" =~ ^In ]] && { _issue "error" "ShellCheck" "$line" "$f" ""; _found=true; }
-    done < <(shellcheck --severity=error \
-      --exclude=SC2155,SC1090,SC1091,SC2034 --shell=bash "$f" 2>&1 || true)
-  fi
+	_total_files=$((_total_files + 1))
+	result=$(bash -n "$f" 2>&1) || {
+		_issue "error" "ShellSyntax" "$f: $result" "$f" ""
+		_found=true
+		continue
+	}
+	if command -v shellcheck >/dev/null 2>&1; then
+		while IFS= read -r line; do
+			[[ "$line" =~ ^In ]] && {
+				_issue "error" "ShellCheck" "$line" "$f" ""
+				_found=true
+			}
+		done < <(shellcheck --severity=error \
+			--exclude=SC2155,SC1090,SC1091,SC2034 --shell=bash "$f" 2>&1 || true)
+	fi
 done < <(find "$TARGET" -type f \( -name "*.sh" -o -name "*.bash" \) \
-  ! -path "*/.git/*" ! -path "*/node_modules/*" 2>/dev/null)
+	! -path "*/.git/*" ! -path "*/node_modules/*" 2>/dev/null)
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_PYTHON) (.py)"
 _found=false
 if [[ -n "$PY" ]]; then
-  while IFS= read -r f; do
-    _total_files=$((_total_files+1))
-    result=$("$PY" -m py_compile "$f" 2>&1) || {
-      _issue "error" "PythonSyntax" "$f: $result" "$f" ""
-      _found=true
-    }
-  done < <(find "$TARGET" -type f -name "*.py" \
-    ! -path "*/.git/*" ! -path "*/__pycache__/*" 2>/dev/null)
+	while IFS= read -r f; do
+		_total_files=$((_total_files + 1))
+		result=$("$PY" -m py_compile "$f" 2>&1) || {
+			_issue "error" "PythonSyntax" "$f: $result" "$f" ""
+			_found=true
+		}
+	done < <(find "$TARGET" -type f -name "*.py" \
+		! -path "*/.git/*" ! -path "*/__pycache__/*" 2>/dev/null)
 fi
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_JS) (.js .mjs)"
 _found=false
 if command -v node >/dev/null 2>&1; then
-  while IFS= read -r f; do
-    _total_files=$((_total_files+1))
-    result=$(node --check "$f" 2>&1) || {
-      _issue "error" "JSSyntax" "$f: $result" "$f" ""
-      _found=true
-    }
-  done < <(find "$TARGET" -type f \( -name "*.js" -o -name "*.mjs" \) \
-    ! -path "*/.git/*" ! -path "*/node_modules/*" 2>/dev/null)
+	while IFS= read -r f; do
+		_total_files=$((_total_files + 1))
+		result=$(node --check "$f" 2>&1) || {
+			_issue "error" "JSSyntax" "$f: $result" "$f" ""
+			_found=true
+		}
+	done < <(find "$TARGET" -type f \( -name "*.js" -o -name "*.mjs" \) \
+		! -path "*/.git/*" ! -path "*/node_modules/*" 2>/dev/null)
 fi
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_YAML) (.yml .yaml)"
 _found=false
 if [[ -n "$PY" ]]; then
-  while IFS= read -r f; do
-    _total_files=$((_total_files+1))
-    result=$("$PY" -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$f" 2>&1) || {
-      _issue "error" "YAMLSyntax" "$f: $result" "$f" ""
-      _found=true
-    }
-  done < <(find "$TARGET" -type f \( -name "*.yml" -o -name "*.yaml" \) \
-    ! -path "*/.git/*" ! -path "*/node_modules/*" 2>/dev/null)
+	while IFS= read -r f; do
+		_total_files=$((_total_files + 1))
+		result=$("$PY" -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" "$f" 2>&1) || {
+			_issue "error" "YAMLSyntax" "$f: $result" "$f" ""
+			_found=true
+		}
+	done < <(find "$TARGET" -type f \( -name "*.yml" -o -name "*.yaml" \) \
+		! -path "*/.git/*" ! -path "*/node_modules/*" 2>/dev/null)
 fi
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_JSON) (.json)"
 _found=false
 if [[ -n "$PY" ]]; then
-  while IFS= read -r f; do
-    _total_files=$((_total_files+1))
-    "$PY" -m json.tool "$f" >/dev/null 2>&1 || {
-      _issue "error" "InvalidJSON" "$f: invalid JSON" "$f" ""
-      _found=true
-    }
-  done < <(find "$TARGET" -type f -name "*.json" \
-    ! -path "*/.git/*" ! -path "*/node_modules/*" 2>/dev/null)
+	while IFS= read -r f; do
+		_total_files=$((_total_files + 1))
+		"$PY" -m json.tool "$f" >/dev/null 2>&1 || {
+			_issue "error" "InvalidJSON" "$f: invalid JSON" "$f" ""
+			_found=true
+		}
+	done < <(find "$TARGET" -type f -name "*.json" \
+		! -path "*/.git/*" ! -path "*/node_modules/*" 2>/dev/null)
 fi
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_TOML) (.toml)"
 _found=false
 if [[ -n "$PY" ]]; then
-  while IFS= read -r f; do
-    _total_files=$((_total_files+1))
-    "$PY" -c "
+	while IFS= read -r f; do
+		_total_files=$((_total_files + 1))
+		"$PY" -c "
 import sys
 try:
     import tomllib; tomllib.load(open(sys.argv[1],'rb'))
 except ImportError:
     try: import tomli; tomli.load(open(sys.argv[1],'rb'))
     except ImportError: pass
-" "$f" 2>&1 || { _issue "error" "InvalidTOML" "$f: invalid TOML" "$f" ""; _found=true; }
-  done < <(find "$TARGET" -type f -name "*.toml" ! -path "*/.git/*" 2>/dev/null)
+" "$f" 2>&1 || {
+			_issue "error" "InvalidTOML" "$f: invalid TOML" "$f" ""
+			_found=true
+		}
+	done < <(find "$TARGET" -type f -name "*.toml" ! -path "*/.git/*" 2>/dev/null)
 fi
 $_found || _ok
 
@@ -151,67 +172,73 @@ _section "$(t L_REPO_SCAN_LANG_SYNC)"
 _found=false
 LANG_DIR="$TARGET/lang"
 if [[ -d "$LANG_DIR" ]]; then
-  REF_LANG=""
-  [[ -f "$LANG_DIR/en.sh" ]] && REF_LANG="$LANG_DIR/en.sh"
-  if [[ -n "$REF_LANG" ]]; then
-    REF_KEYS=$(grep -oP '^L_\w+' "$REF_LANG" 2>/dev/null | sort)
-    while IFS= read -r lf; do
-      [[ "$lf" == "$REF_LANG" ]] && continue
-      lname=$(basename "$lf")
-      LF_KEYS=$(grep -oP '^L_\w+' "$lf" 2>/dev/null | sort)
-      while IFS= read -r missing; do
-        [[ -z "$missing" ]] && continue
-        _issue "warn" "LangKeyMissing" \
-          "lang/$lname: $(t L_REPO_SCAN_LANG_MISSING_KEY): $missing" "$lf" ""
-        _found=true
-      done < <(comm -23 <(echo "$REF_KEYS") <(echo "$LF_KEYS"))
-      while IFS= read -r orphan; do
-        [[ -z "$orphan" ]] && continue
-        _issue "warn" "LangKeyOrphan" \
-          "lang/$lname: $(t L_REPO_SCAN_LANG_ORPHAN_KEY): $orphan" "$lf" ""
-        _found=true
-      done < <(comm -13 <(echo "$REF_KEYS") <(echo "$LF_KEYS"))
-    done < <(find "$LANG_DIR" -name "*.sh" 2>/dev/null)
-  fi
+	REF_LANG=""
+	[[ -f "$LANG_DIR/en.sh" ]] && REF_LANG="$LANG_DIR/en.sh"
+	if [[ -n "$REF_LANG" ]]; then
+		REF_KEYS=$(grep -oP '^L_\w+' "$REF_LANG" 2>/dev/null | sort)
+		while IFS= read -r lf; do
+			[[ "$lf" == "$REF_LANG" ]] && continue
+			lname=$(basename "$lf")
+			LF_KEYS=$(grep -oP '^L_\w+' "$lf" 2>/dev/null | sort)
+			while IFS= read -r missing; do
+				[[ -z "$missing" ]] && continue
+				_issue "warn" "LangKeyMissing" \
+					"lang/$lname: $(t L_REPO_SCAN_LANG_MISSING_KEY): $missing" "$lf" ""
+				_found=true
+			done < <(comm -23 <(echo "$REF_KEYS") <(echo "$LF_KEYS"))
+			while IFS= read -r orphan; do
+				[[ -z "$orphan" ]] && continue
+				_issue "warn" "LangKeyOrphan" \
+					"lang/$lname: $(t L_REPO_SCAN_LANG_ORPHAN_KEY): $orphan" "$lf" ""
+				_found=true
+			done < <(comm -13 <(echo "$REF_KEYS") <(echo "$LF_KEYS"))
+		done < <(find "$LANG_DIR" -name "*.sh" 2>/dev/null)
+	fi
 fi
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_TKEY_SYNC)"
 _found=false
 if [[ -n "$REF_LANG" ]] 2>/dev/null || [[ -f "$TARGET/lang/en.sh" ]]; then
-  KEYFILE="${REF_LANG:-$TARGET/lang/en.sh}"
-  ALL_KEYS=$(grep -oP '^L_\w+' "$KEYFILE" 2>/dev/null | sort)
-  while IFS= read -r f; do
-    while IFS= read -r used_key; do
-      [[ -z "$used_key" ]] && continue
-      echo "$ALL_KEYS" | grep -qx "$used_key" || {
-        lineno=$(grep -n "t $used_key\b\|t \"$used_key\"" "$f" 2>/dev/null | head -1 | cut -d: -f1)
-        _issue "warn" "MissingTKey" \
-          "$f:${lineno:-?} — $(t L_REPO_SCAN_TKEY_MISSING): $used_key" "$f" "${lineno:-}"
-        _found=true
-      }
-    done < <(grep -oP '(?<=\bt )\bL_\w+' "$f" 2>/dev/null | sort -u)
-  done < <(find "$TARGET" -type f \( -name "*.sh" -o -name "*.bash" \) \
-    ! -path "*/.git/*" ! -path "*/node_modules/*" 2>/dev/null)
+	KEYFILE="${REF_LANG:-$TARGET/lang/en.sh}"
+	ALL_KEYS=$(grep -oP '^L_\w+' "$KEYFILE" 2>/dev/null | sort)
+	while IFS= read -r f; do
+		while IFS= read -r used_key; do
+			[[ -z "$used_key" ]] && continue
+			echo "$ALL_KEYS" | grep -qx "$used_key" || {
+				lineno=$(grep -n "t $used_key\b\|t \"$used_key\"" "$f" 2>/dev/null | head -1 | cut -d: -f1)
+				_issue "warn" "MissingTKey" \
+					"$f:${lineno:-?} — $(t L_REPO_SCAN_TKEY_MISSING): $used_key" "$f" "${lineno:-}"
+				_found=true
+			}
+		done < <(grep -oP '(?<=\bt )\bL_\w+' "$f" 2>/dev/null | sort -u)
+	done < <(find "$TARGET" -type f \( -name "*.sh" -o -name "*.bash" \) \
+		! -path "*/.git/*" ! -path "*/node_modules/*" 2>/dev/null)
 fi
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_SOURCE_GUARD)"
 _found=false
 while IFS= read -r f; do
-  if grep -q 'TDOC_ROOT' "$f" 2>/dev/null && \
-     ! grep -qE ':\s+"?\$\{TDOC_ROOT:?' "$f" 2>/dev/null; then
-    _issue "warn" "MissingSourceGuard" \
-      "$f: $(t L_REPO_SCAN_NO_GUARD): TDOC_ROOT" "$f" "1"
-    _found=true
-  fi
-  if grep -q '\$PREFIX' "$f" 2>/dev/null && \
-     ! grep -qE ':\s+"?\$\{PREFIX:?' "$f" 2>/dev/null && \
-     ! grep -q 'TDOC_ROOT' "$f" 2>/dev/null; then
-    _issue "warn" "MissingSourceGuard" \
-      "$f: $(t L_REPO_SCAN_NO_GUARD): PREFIX" "$f" "1"
-    _found=true
-  fi
+	# init.sh DEFINES TDOC_ROOT defaults (export TDOC_ROOT="${TDOC_ROOT:-...}");
+	# requiring a strict guard there would defeat the fallback. Skip it.
+	[[ "$(basename "$f")" == "init.sh" ]] && continue
+	# Only count real (unescaped) $TDOC_ROOT / ${TDOC_ROOT usage;
+	# ignore \$TDOC_ROOT mentioned in help text/comments.
+	if grep -qE '(^|[^\\])\$(TDOC_ROOT|\{TDOC_ROOT)' "$f" 2>/dev/null &&
+		! grep -qE ':\s+"?\$\{TDOC_ROOT:?' "$f" 2>/dev/null; then
+		_issue "warn" "MissingSourceGuard" \
+			"$f: $(t L_REPO_SCAN_NO_GUARD): TDOC_ROOT" "$f" "1"
+		_found=true
+	fi
+	if grep -qE '(^|[^\\])\$(PREFIX|\{PREFIX)' "$f" 2>/dev/null &&
+		! grep -qE ':\s+"?\$\{PREFIX:?' "$f" 2>/dev/null &&
+		! grep -qE '\$\{PREFIX:-' "$f" 2>/dev/null &&
+		! grep -q 'TDOC_ROOT' "$f" 2>/dev/null; then
+		_issue "warn" "MissingSourceGuard" \
+			"$f: $(t L_REPO_SCAN_NO_GUARD): PREFIX" "$f" "1"
+		_found=true
+	fi
 done < <(find "$TARGET/core" "$TARGET/modules" -name "*.sh" 2>/dev/null)
 $_found || _ok
 
@@ -219,27 +246,31 @@ _section "$(t L_REPO_SCAN_UNREF_FUNCS)"
 _found=false
 declare -A _def_funcs=()
 while IFS= read -r f; do
-  while IFS= read -r line; do
-    fname=$(echo "$line" | grep -oP '^(function\s+)?\K\w+(?=\s*\(\s*\)\s*\{?)')
-    [[ -n "$fname" ]] && _def_funcs["$fname"]="$f"
-  done < <(grep -P '^(function\s+)?\w+\s*\(\s*\)\s*\{?' "$f" 2>/dev/null)
+	while IFS= read -r line; do
+		fname=$(echo "$line" | grep -oP '^(function\s+)?\K\w+(?=\s*\(\s*\)\s*\{?)')
+		[[ -n "$fname" ]] && _def_funcs["$fname"]="$f"
+	done < <(grep -P '^(function\s+)?\w+\s*\(\s*\)\s*\{?' "$f" 2>/dev/null)
 done < <(find "$TARGET" -type f \( -name "*.sh" -o -name "*.bash" \) \
-  ! -path "*/.git/*" 2>/dev/null)
+	! -path "*/.git/*" 2>/dev/null)
 
 for fname in "${!_def_funcs[@]}"; do
-  src="${_def_funcs[$fname]}"
-  calls=$(grep -r --include="*.sh" --include="*.bash" --include="tdoc" \
-    -l "\\b${fname}\\b" "$TARGET" 2>/dev/null | grep -cv "^${src}$" || echo 0)
-  if [[ "$calls" -eq 0 ]]; then
-    if echo "$fname" | grep -qE "^(check_|fix_|auto_fix_|preview_)"; then
-      _issue "warn" "UnrefFuncModule" \
-        "$(t L_REPO_SCAN_UNREF_FUNC_MODULE): ${fname}() — $(basename "$src")" "$src" ""
-    else
-      _issue "warn" "UnrefFunc" \
-        "$(t L_REPO_SCAN_UNREF_FUNC): ${fname}() — $(basename "$src")" "$src" ""
-    fi
-    _found=true
-  fi
+	# Dynamic-dispatch entry points (check_*/fix_*/auto_fix_*/preview_*) are
+	# invoked via variable expansion (e.g. "check_${mod_name}", "fix_$key",
+	# fix_repo_${KEY}) so literal grep can never find them. Skip to avoid noise.
+	if [[ "$fname" =~ ^(check_|fix_|auto_fix_|preview_) ]]; then continue; fi
+	src="${_def_funcs[$fname]}"
+	# Count references INCLUDING the defining file (helpers used only in the
+	# same file are used). Subtract definition lines to get call count.
+	total=$(grep -r --include="*.sh" --include="*.bash" --include="tdoc" \
+		-E "\\b${fname}\\b" "$TARGET" 2>/dev/null | wc -l)
+	defs=$(grep -r --include="*.sh" --include="*.bash" --include="tdoc" \
+		-E "^[[:space:]]*(function[[:space:]]+)?${fname}[[:space:]]*\\(\\)" "$TARGET" 2>/dev/null | wc -l)
+	calls=$((total - defs))
+	if [[ "$calls" -le 0 ]]; then
+		_issue "warn" "UnrefFunc" \
+			"$(t L_REPO_SCAN_UNREF_FUNC): ${fname}() — $(basename "$src")" "$src" ""
+		_found=true
+	fi
 done
 unset _def_funcs
 $_found || _ok
@@ -247,15 +278,24 @@ $_found || _ok
 _section "$(t L_REPO_SCAN_UNREF_MODULES)"
 _found=false
 while IFS= read -r f; do
-  fname=$(basename "$f"); fnoext="${fname%.sh}"
-  refs=$(grep -r --include="*.sh" --include="*.bash" --include="tdoc" \
-    -lE "source[[:space:]]+.*${fname}|\\..*/${fname}|source.*${fnoext}" \
-    "$TARGET" 2>/dev/null | wc -l)
-  [[ "$refs" -eq 0 ]] && {
-    _issue "warn" "UnrefModule" \
-      "$(t L_REPO_SCAN_UNREF_MODULE): $fname" "$f" ""
-    _found=true
-  }
+	fname=$(basename "$f")
+	# Standalone entry-point scripts in repo root (install.sh, uninstall.sh,
+	# tdocfix.sh, ...) are executables, not libraries. Skip.
+	[[ "$(dirname "$f")" == "$TARGET" ]] && continue
+	# Modules handled inline by scan.sh (node|python|storage|repo) are
+	# intentionally skipped in the autoload loop. Not dead. Skip.
+	if [[ "$f" == */modules/* ]]; then
+		case "${fname%.sh}" in node|python|storage|repo) continue ;; esac
+	fi
+	fnoext="${fname%.sh}"
+	refs=$(grep -r --include="*.sh" --include="*.bash" --include="tdoc" \
+		-lE "source[[:space:]]+.*${fname}|\\..*/${fname}|source.*${fnoext}" \
+		"$TARGET" 2>/dev/null | wc -l)
+	[[ "$refs" -eq 0 ]] && {
+		_issue "warn" "UnrefModule" \
+			"$(t L_REPO_SCAN_UNREF_MODULE): $fname" "$f" ""
+		_found=true
+	}
 done < <(find "$TARGET" -type f -name "*.sh" ! -path "*/.git/*" 2>/dev/null)
 $_found || _ok
 
@@ -263,73 +303,74 @@ _section "$(t L_REPO_SCAN_UNDEF_CALLS)"
 _found=false
 declare -A _all_defs=()
 while IFS= read -r f; do
-  while IFS= read -r line; do
-    fname=$(echo "$line" | grep -oP '^(function\s+)?\K\w+(?=\s*\(\s*\)\s*\{?)')
-    [[ -n "$fname" ]] && _all_defs["$fname"]=1
-  done < <(grep -P '^(function\s+)?\w+\s*\(\s*\)\s*\{?' "$f" 2>/dev/null)
+	while IFS= read -r line; do
+		fname=$(echo "$line" | grep -oP '^(function\s+)?\K\w+(?=\s*\(\s*\)\s*\{?)')
+		[[ -n "$fname" ]] && _all_defs["$fname"]=1
+	done < <(grep -P '^(function\s+)?\w+\s*\(\s*\)\s*\{?' "$f" 2>/dev/null)
 done < <(find "$TARGET" -type f \( -name "*.sh" -o -name "*.bash" \) \
-  ! -path "*/.git/*" 2>/dev/null)
+	! -path "*/.git/*" 2>/dev/null)
 
 while IFS= read -r f; do
-  lineno=0
-  while IFS= read -r line; do
-    lineno=$((lineno+1))
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    called=$(echo "$line" | \
-      grep -oP '(?:^|;\s*)(check_|fix_|auto_fix_|preview_)\w+' | \
-      grep -oP '(check_|fix_|auto_fix_|preview_)\w+' | head -1)
-    [[ -z "$called" ]] && continue
-    [[ -z "${_all_defs[$called]:-}" ]] && {
-      _issue "error" "UndefCall" \
-        "$f:$lineno — $(t L_REPO_SCAN_UNDEF_CALL): ${called}()" "$f" "$lineno"
-      _found=true
-    }
-  done < "$f"
+	lineno=0
+	while IFS= read -r line; do
+		lineno=$((lineno + 1))
+		[[ "$line" =~ ^[[:space:]]*# ]] && continue
+		called=$(echo "$line" |
+			grep -oP '(?:^|;\s*)(check_|fix_|auto_fix_|preview_)\w+' |
+			grep -oP '(check_|fix_|auto_fix_|preview_)\w+' | head -1)
+		[[ -z "$called" ]] && continue
+		[[ -z "${_all_defs[$called]:-}" ]] && {
+			_issue "error" "UndefCall" \
+				"$f:$lineno — $(t L_REPO_SCAN_UNDEF_CALL): ${called}()" "$f" "$lineno"
+			_found=true
+		}
+	done <"$f"
 done < <(find "$TARGET" -type f \( -name "*.sh" -o -name "*.bash" \) \
-  ! -path "*/.git/*" 2>/dev/null)
+	! -path "*/.git/*" 2>/dev/null)
 unset _all_defs
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_DOCKER)"
 _found=false
 while IFS= read -r f; do
-  _total_files=$((_total_files+1))
-  grep -qE "^FROM " "$f" 2>/dev/null || {
-    _issue "warn" "DockerNoFrom" \
-      "$f: $(t L_REPO_SCAN_DOCKER_NO_FROM)" "$f" ""
-    _found=true
-  }
+	_total_files=$((_total_files + 1))
+	grep -qE "^FROM " "$f" 2>/dev/null || {
+		_issue "warn" "DockerNoFrom" \
+			"$f: $(t L_REPO_SCAN_DOCKER_NO_FROM)" "$f" ""
+		_found=true
+	}
 done < <(find "$TARGET" -name "Dockerfile*" ! -path "*/.git/*" 2>/dev/null)
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_REQUIREMENTS)"
 _found=false
 while IFS= read -r f; do
-  _total_files=$((_total_files+1))
-  lineno=0
-  while IFS= read -r line; do
-    lineno=$((lineno+1))
-    [[ -z "$line" || "$line" =~ ^# ]] && continue
-    echo "$line" | grep -qE "(==|===|~=|!=|>=|<=|>|<|@)" || {
-      _issue "warn" "UnpinnedDep" \
-        "$f:$lineno — $(t L_REPO_SCAN_UNPINNED): $line" "$f" "$lineno"
-      _found=true
-    }
-  done < "$f"
+	_total_files=$((_total_files + 1))
+	lineno=0
+	while IFS= read -r line; do
+		lineno=$((lineno + 1))
+		[[ -z "$line" || "$line" =~ ^# ]] && continue
+		echo "$line" | grep -qE "(==|===|~=|!=|>=|<=|>|<|@)" || {
+			_issue "warn" "UnpinnedDep" \
+				"$f:$lineno — $(t L_REPO_SCAN_UNPINNED): $line" "$f" "$lineno"
+			_found=true
+		}
+	done <"$f"
 done < <(find "$TARGET" -name "requirements*.txt" ! -path "*/.git/*" 2>/dev/null)
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_PACKAGEJSON)"
 _found=false
 if [[ -n "$PY" ]]; then
-  while IFS= read -r f; do
-    _total_files=$((_total_files+1))
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && {
-        _issue "warn" "UnpinnedDep" "$line" "$f" ""
-        _found=true
-      }
-    done < <("$PY" - "$f" 2>/dev/null << 'PYEOF'
+	while IFS= read -r f; do
+		_total_files=$((_total_files + 1))
+		while IFS= read -r line; do
+			[[ -n "$line" ]] && {
+				_issue "warn" "UnpinnedDep" "$line" "$f" ""
+				_found=true
+			}
+		done < <(
+			"$PY" - "$f" 2>/dev/null <<'PYEOF'
 import json,sys
 try:
     data=json.load(open(sys.argv[1]))
@@ -339,55 +380,59 @@ try:
                 print(f"{sys.argv[1]}: unpinned {sec}: {pkg}@{ver}")
 except Exception: pass
 PYEOF
-)
-  done < <(find "$TARGET" -name "package.json" \
-    ! -path "*/node_modules/*" ! -path "*/.git/*" 2>/dev/null)
+		)
+	done < <(find "$TARGET" -name "package.json" \
+		! -path "*/node_modules/*" ! -path "*/.git/*" 2>/dev/null)
 fi
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_MAKEFILE)"
 _found=false
 while IFS= read -r f; do
-  _total_files=$((_total_files+1))
-  grep -Pnm1 "^\t? +[^\t]" "$f" 2>/dev/null | grep -q . && {
-    _issue "warn" "MakefileSpace" \
-      "$f: $(t L_REPO_SCAN_MAKEFILE_SPACES)" "$f" ""
-    _found=true
-  }
+	_total_files=$((_total_files + 1))
+	grep -Pnm1 "^\t? +[^\t]" "$f" 2>/dev/null | grep -q . && {
+		_issue "warn" "MakefileSpace" \
+			"$f: $(t L_REPO_SCAN_MAKEFILE_SPACES)" "$f" ""
+		_found=true
+	}
 done < <(find "$TARGET" -name "Makefile" ! -path "*/.git/*" 2>/dev/null)
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_MARKDOWN) (.md)"
 _found=false
 while IFS= read -r f; do
-  _total_files=$((_total_files+1))
-  dir=$(dirname "$f")
-  while IFS= read -r link; do
-    [[ -z "$link" ]] && continue
-    [[ "$link" =~ ^https?:// || "$link" =~ ^# || "$link" =~ ^mailto: ]] && continue
-    linkpath="${link%%#*}"; [[ -z "$linkpath" ]] && continue
-    [[ -e "$dir/$linkpath" ]] || {
-      lineno=$(grep -n "$link" "$f" 2>/dev/null | head -1 | cut -d: -f1)
-      _issue "warn" "BrokenMdLink" \
-        "$f:${lineno:-?} — $(t L_REPO_SCAN_MD_BROKEN_LINK): $link" "$f" "${lineno:-}"
-      _found=true
-    }
-  done < <(grep -oP '\]\(\K[^)]+(?=\))' "$f" 2>/dev/null)
+	_total_files=$((_total_files + 1))
+	dir=$(dirname "$f")
+	while IFS= read -r link; do
+		[[ -z "$link" ]] && continue
+		[[ "$link" =~ ^https?:// || "$link" =~ ^# || "$link" =~ ^mailto: ]] && continue
+		# Bare emails (user@example.com) are not file links. Skip.
+		[[ "$link" == *"@"* ]] && continue
+		linkpath="${link%%#*}"
+		[[ -z "$linkpath" ]] && continue
+		[[ -e "$dir/$linkpath" ]] || {
+			lineno=$(grep -n "$link" "$f" 2>/dev/null | head -1 | cut -d: -f1)
+			_issue "warn" "BrokenMdLink" \
+				"$f:${lineno:-?} — $(t L_REPO_SCAN_MD_BROKEN_LINK): $link" "$f" "${lineno:-}"
+			_found=true
+		}
+	done < <(grep -oP '\]\(\K[^)]+(?=\))' "$f" 2>/dev/null)
 done < <(find "$TARGET" -name "*.md" ! -path "*/.git/*" 2>/dev/null)
 $_found || _ok
 
 _section "$(t L_REPO_SCAN_LOGS) (.log .out .err)"
 _found=false
 while IFS= read -r f; do
-  _total_files=$((_total_files+1))
-  count=$(grep -ciE "Traceback|Error:|Exception:|FATAL|CRITICAL|Segmentation fault" "$f" 2>/dev/null || echo 0)
-  [[ "$count" -gt 0 ]] && {
-    _issue "warn" "Traceback" \
-      "$f: $count $(t L_REPO_SCAN_LOG_HITS)" "$f" ""
-    _found=true
-  }
+	_total_files=$((_total_files + 1))
+	count=$(grep -ciE "Traceback|Error:|Exception:|FATAL|CRITICAL|Segmentation fault" "$f" 2>/dev/null || true)
+	count=${count:-0}
+	[[ "$count" -gt 0 ]] && {
+		_issue "warn" "Traceback" \
+			"$f: $count $(t L_REPO_SCAN_LOG_HITS)" "$f" ""
+		_found=true
+	}
 done < <(find "$TARGET" -type f \( -name "*.log" -o -name "*.out" -o -name "*.err" \) \
-  ! -path "*/.git/*" 2>/dev/null)
+	! -path "*/.git/*" ! -path "*/tests/*" ! -path "*/fixtures/*" 2>/dev/null)
 $_found || _ok
 
 echo
@@ -401,15 +446,15 @@ echo -e "${CYAN}${BORDER}${RESET}"
 echo
 
 if [[ $_broken -gt 0 ]]; then
-  echo -e "${RED}${ICON_ERR} $(t L_REPO_SCAN_HAS_ERRORS)${RESET}"
-  echo -e "${GRAY}  → tdoc repo-fix          $(t L_REPO_SCAN_FIX_HINT)${RESET}"
-  echo -e "${GRAY}  → tdoc repo-fix --auto   $(t L_REPO_SCAN_AUTOFIX_HINT)${RESET}"
-  echo -e "${GRAY}  → tdoc diagnose --last   $(t L_REPO_SCAN_DIAGNOSE_HINT)${RESET}"
+	echo -e "${RED}${ICON_ERR} $(t L_REPO_SCAN_HAS_ERRORS)${RESET}"
+	echo -e "${GRAY}  → tdoc repo-fix          $(t L_REPO_SCAN_FIX_HINT)${RESET}"
+	echo -e "${GRAY}  → tdoc repo-fix --auto   $(t L_REPO_SCAN_AUTOFIX_HINT)${RESET}"
+	echo -e "${GRAY}  → tdoc diagnose --last   $(t L_REPO_SCAN_DIAGNOSE_HINT)${RESET}"
 elif [[ $_warnings -gt 0 ]]; then
-  echo -e "${YELLOW}${ICON_WARN} $(t L_REPO_SCAN_HAS_WARNINGS)${RESET}"
-  echo -e "${GRAY}  → tdoc repo-fix          $(t L_REPO_SCAN_FIX_HINT)${RESET}"
-  echo -e "${GRAY}  → tdoc diagnose --last   $(t L_REPO_SCAN_DIAGNOSE_HINT)${RESET}"
+	echo -e "${YELLOW}${ICON_WARN} $(t L_REPO_SCAN_HAS_WARNINGS)${RESET}"
+	echo -e "${GRAY}  → tdoc repo-fix          $(t L_REPO_SCAN_FIX_HINT)${RESET}"
+	echo -e "${GRAY}  → tdoc diagnose --last   $(t L_REPO_SCAN_DIAGNOSE_HINT)${RESET}"
 else
-  echo -e "${GREEN}${ICON_OK} $(t L_REPO_SCAN_ALL_OK)${RESET}"
+	echo -e "${GREEN}${ICON_OK} $(t L_REPO_SCAN_ALL_OK)${RESET}"
 fi
 echo

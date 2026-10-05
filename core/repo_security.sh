@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # TDOC — Repository Security Logic
+: "${PREFIX:?PREFIX is not set}"
 
 KEYRING="$PREFIX/share/keyrings/termux-archive-keyring.gpg"
 APT_LISTS="$PREFIX/var/lib/apt/lists"

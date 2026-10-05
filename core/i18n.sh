@@ -2,6 +2,7 @@
 # ==============================
 # TDOC — i18n Engine (Translator)
 # ==============================
+: "${TDOC_ROOT:?TDOC_ROOT is not set}"
 
 t() {
   local key="$1"

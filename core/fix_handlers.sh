@@ -2,6 +2,7 @@
 # ==============================
 # TDOC — Fix Handlers (Compliant)
 # ==============================
+: "${TDOC_ROOT:?TDOC_ROOT is not set}"
 
 source "$TDOC_ROOT/core/ui.sh"
 

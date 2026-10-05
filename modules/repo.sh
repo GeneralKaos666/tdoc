@@ -1,3 +1,4 @@
+: "${PREFIX:?PREFIX is not set}"
 repo() {
   local found=0
 

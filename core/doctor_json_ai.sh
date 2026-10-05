@@ -2,6 +2,7 @@
 # ==============================
 # TDOC — Doctor JSON Output with AI Explanations
 # ==============================
+: "${TDOC_ROOT:?TDOC_ROOT is not set}"
 
 STATE_FILE="$PREFIX/var/lib/tdoc/state.env"
 

@@ -2,6 +2,7 @@
 # ==============================
 # TDOC — Explanation Runner
 # ==============================
+: "${TDOC_ROOT:?TDOC_ROOT is not set}"
 
 source "$TDOC_ROOT/core/ai_explain.sh"
 STATE_FILE="${PREFIX:-/data/data/com.termux/files/usr}/var/lib/tdoc/state.env"
